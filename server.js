@@ -9,6 +9,11 @@ dotenv.config();
 
 const app = express();
 
+app.get("/", (req, res) => {
+  res.send("✅ Backend deployed successfully!");
+});
+
+
 // Middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
