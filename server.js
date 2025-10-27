@@ -1,4 +1,3 @@
-// backend/server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -14,11 +13,29 @@ app.get("/", (req, res) => {
 });
 
 
+// --- UPDATE ---
+// We need to create a list of all URLs that are allowed to make requests.
+const allowedOrigins = [
+  process.env.FRONTEND_URL, // This is for your Vercel environment variable
+  'http://localhost:3000',  // This is for your local development
+  'https://resume-builder-sigma-plum.vercel.app' // This is your deployed frontend
+];
+
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  // The 'origin' option checks if the incoming request is from one of the URLs in our list.
+  origin: function (origin, callback) {
+    // If the request's origin is in our list (or there's no origin, e.g., Postman), allow it.
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
+// --- END OF UPDATE ---
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
