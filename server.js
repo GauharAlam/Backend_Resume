@@ -18,7 +18,8 @@ app.get("/", (req, res) => {
 const allowedOrigins = [
   process.env.FRONTEND_URL, // This is for your Vercel environment variable
   'http://localhost:3000',  // This is for your local development
-  'https://resume-builder-tawny-one-44.vercel.app' // This is your deployed frontend
+  'https://resume-builder-tawny-one-44.vercel.app', // This is your deployed frontend
+  'https://ai-resumebuilders.netlify.app/'   //for netlify 
 ];
 
 // Middleware
