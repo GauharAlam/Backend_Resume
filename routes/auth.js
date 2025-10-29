@@ -71,6 +71,7 @@ router.post('/login', async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ msg: 'Please provide email and password.' });
     }
+    
 
     // FIX: Use .select('+password') to explicitly include the password field
     // even though it has select: false in the schema
