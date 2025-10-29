@@ -25,12 +25,12 @@ const allowedOrigins = [
 //for netlify 
 // Middleware
 app.use(cors({
-  // The 'origin' option checks if the incoming request is from one of the URLs in our list.
   origin: function (origin, callback) {
-    // If the request's origin is in our list (or there's no origin, e.g., Postman), allow it.
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      // Log the blocked origin for debugging
+      console.error(`CORS blocked origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
