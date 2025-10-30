@@ -13,29 +13,15 @@ app.get("/", (req, res) => {
 });
 
 
-// --- UPDATE ---
-// We need to create a list of all URLs that are allowed to make requests.
-const allowedOrigins = [
-  process.env.FRONTEND_URL, // This is for your Vercel environment variable
-  'http://localhost:3000',  // This is for your local development
-  'https://resume-builder-tawny-one-44.vercel.app', // This is your deployed frontend
-  'https://ai-resumebuilders.netlify.app',  //for netlify 
-  'http://localhost:4173'   
-];
-//for netlify 
-// Middleware
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      // Log the blocked origin for debugging
-      console.error(`CORS blocked origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
+  origin: "*", // Allow all domains
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 }));
+
+app.get("/", (req, res) => {
+  res.send("✅ Backend deployed successfully and CORS open for all!");
+});
 // --- END OF UPDATE ---
 
 app.use(express.json({ limit: '50mb' }));
