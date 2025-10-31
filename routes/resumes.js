@@ -14,11 +14,18 @@ const verifyToken = (req, res, next) => {
     return res.status(401).json({ msg: 'No token provided, authorization denied.' });
   }
 
+  console.log("hiiiiiii");
+  
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
     req.userName = decoded.name;
     req.userEmail = decoded.email;
+    console.log('Decoded JWT:', decoded);
+    console.log('User ID from token:', req.userId);
+    console.log('User Name from token:', req.userName);
+    console.log('User Email from token:', req.userEmail);
     next();
   } catch (error) {
     res.status(401).json({ msg: 'Invalid or expired token.' });
