@@ -7,6 +7,7 @@ const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
 
+
 // ============ REGISTER ROUTE ============
 router.post('/register', async (req, res) => {
   try {
@@ -46,6 +47,8 @@ router.post('/register', async (req, res) => {
       JWT_SECRET,
       { expiresIn: '7d' }
     );
+    console.log("token",token);
+    
 
     res.status(201).json({
       msg: 'User registered successfully!',

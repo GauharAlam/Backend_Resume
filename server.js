@@ -12,9 +12,8 @@ app.get("/", (req, res) => {
   res.send("✅ Backend deployed successfully!");
 });
 
-
 app.use(cors({
-  origin: "*", // Allow all domains
+  origin: "*", // Your Vercel frontend URL
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
