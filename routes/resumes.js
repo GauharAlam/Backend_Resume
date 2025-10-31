@@ -4,7 +4,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const Resume = require('../models/Resume');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
+const JWT_SECRET = process.env.JWT_SECRET || 'G@123456 ';
 
 // Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
