@@ -53,7 +53,7 @@ const createResume = asyncHandler(async (req, res) => {
     });
 
     res.status(201).json(
-        ApiResponse.success(resume, 'Resume created successfully!')
+        ApiResponse.created(resume, 'Resume created successfully!')
     );
 });
 

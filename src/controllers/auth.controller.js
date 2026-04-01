@@ -29,7 +29,7 @@ const register = asyncHandler(async (req, res) => {
     const result = await authService.registerUser({ name, email, password });
 
     res.status(201).json(
-        ApiResponse.success(
+        ApiResponse.created(
             {
                 token: result.token,
                 user: result.user,

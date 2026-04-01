@@ -11,18 +11,30 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Import utilities
 const ApiError = require('./src/utils/ApiError');
 const { HTTP_STATUS } = require('./src/utils/constants');
+const { getAllowedCorsOrigins, isProduction } = require('./src/utils/env');
 
 // =============================================================================
 // MIDDLEWARE CONFIGURATION
 // =============================================================================
 
 // CORS Configuration
+const allowedOrigins = getAllowedCorsOrigins();
 app.use(cors({
-  origin: '*',
+  origin: (origin, callback) => {
+    // Allow non-browser or same-origin requests without Origin header
+    if (!origin) return callback(null, true);
+    // In non-production, allow localhost/127.0.0.1 on any port to avoid dev-port lock issues.
+    if (!isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));

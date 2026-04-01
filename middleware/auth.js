@@ -3,8 +3,9 @@
  * Verifies JWT tokens and attaches user info to request
  */
 const jwt = require('jsonwebtoken');
+const { getJwtSecret } = require('../src/utils/env');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
+const JWT_SECRET = getJwtSecret();
 
 /**
  * Middleware to verify JWT token from Authorization header

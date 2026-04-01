@@ -7,10 +7,12 @@ const router = express.Router();
 
 const authRoutes = require('./auth.routes');
 const resumeRoutes = require('./resume.routes');
+const analyticsRoutes = require('./analytics.routes');
 
 // Mount routes
 router.use('/auth', authRoutes);
 router.use('/resumes', resumeRoutes);
+router.use('/analytics', analyticsRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
