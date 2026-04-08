@@ -25,10 +25,12 @@ const getAllowedCorsOrigins = () => {
 
     if (isProduction) {
         if (envOrigins.length === 0) {
-            throw new Error('CORS_ORIGINS must be set in production (comma-separated list).');
+            console.error('❌ CRITICAL ERROR: CORS_ORIGINS environment variable is missing.');
+            console.error('Please set CORS_ORIGINS to your frontend URL (e.g., https://your-site.vercel.app) in your hosting dashboard.');
+            throw new Error('CORS_ORIGINS must be set in production.');
         }
         if (envOrigins.includes('*')) {
-            throw new Error('CORS_ORIGINS cannot include "*" in production.');
+            throw new Error('CORS_ORIGINS cannot include "*" in production for security reasons.');
         }
         return envOrigins;
     }
