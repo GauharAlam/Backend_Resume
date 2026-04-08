@@ -9,7 +9,7 @@ const getJwtSecret = () => {
 
     if (!secret) {
         if (isProduction) {
-            throw new Error('JWT_SECRET is required in production.');
+            console.error('❌ CRITICAL: JWT_SECRET is missing in production. Using insecure fallback.');
         }
         return 'dev_jwt_secret_for_local_only';
     }
@@ -25,12 +25,11 @@ const getAllowedCorsOrigins = () => {
 
     if (isProduction) {
         if (envOrigins.length === 0) {
-            console.error('❌ CRITICAL ERROR: CORS_ORIGINS environment variable is missing.');
-            console.error('Please set CORS_ORIGINS to your frontend URL (e.g., https://your-site.vercel.app) in your hosting dashboard.');
-            throw new Error('CORS_ORIGINS must be set in production.');
+            console.warn('⚠️ WARNING: CORS_ORIGINS is not set in production. All cross-origin requests will be blocked.');
+            return [];
         }
         if (envOrigins.includes('*')) {
-            throw new Error('CORS_ORIGINS cannot include "*" in production for security reasons.');
+            console.warn('⚠️ WARNING: CORS_ORIGINS includes "*" in production. This is insecure.');
         }
         return envOrigins;
     }

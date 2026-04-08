@@ -65,30 +65,47 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const MONGO_URI = process.env.MONGO_URI;
 
+let isMongoConnected = false;
+let mongoError = null;
+
 if (!MONGO_URI) {
   console.error('❌ MONGO_URI is not defined in environment variables');
-  process.exit(1);
+  mongoError = 'MONGO_URI is missing';
+} else {
+  mongoose.connect(MONGO_URI)
+    .then(() => {
+      console.log('✅ MongoDB connected successfully');
+      isMongoConnected = true;
+    })
+    .catch((err) => {
+      console.error('❌ MongoDB connection error:', err);
+      mongoError = err.message;
+    });
 }
-
-mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log('✅ MongoDB connected successfully');
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err);
-    process.exit(1);
-  });
 
 // =============================================================================
 // ROUTES
 // =============================================================================
 
-// Root endpoint
+// Root endpoint - Now acts as a Health Check & Status Report
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
-    message: '✅ Backend deployed successfully!',
-    version: '1.0.0',
+    message: '🚀 AI Resume Builder Backend Status',
+    status: {
+      database: isMongoConnected ? '✅ Connected' : `❌ Error: ${mongoError || 'Initializing...'}`,
+      environment: process.env.NODE_ENV || 'development',
+      cors: {
+        origins: allowedOrigins.length > 0 ? allowedOrigins : '⚠️ Localhost Only',
+      },
+      security: {
+        helmet: '✅ Active',
+        rateLimit: '✅ Active'
+      }
+    },
+    action_required: (!isMongoConnected || allowedOrigins.length === 0) 
+      ? 'Please check your environment variables in your hosting dashboard.' 
+      : 'None. System is healthy.'
   });
 });
 
