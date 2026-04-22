@@ -82,6 +82,25 @@ const validateLogin = (req, res, next) => {
 };
 
 /**
+ * Validate Google login input
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+const validateGoogleLogin = (req, res, next) => {
+    const { credential } = req.body;
+
+    if (!credential || typeof credential !== 'string') {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+            success: false,
+            message: 'Google credential is required',
+        });
+    }
+
+    next();
+};
+
+/**
  * Validate token input
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -103,5 +122,6 @@ const validateToken = (req, res, next) => {
 module.exports = {
     validateRegister,
     validateLogin,
+    validateGoogleLogin,
     validateToken,
 };

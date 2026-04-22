@@ -17,6 +17,19 @@ const getJwtSecret = () => {
     return secret;
 };
 
+const getGoogleClientId = () => {
+    const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+
+    if (!clientId) {
+        if (isProduction) {
+            console.error('❌ CRITICAL: GOOGLE_CLIENT_ID is missing in production. Google sign-in will fail.');
+        }
+        return '';
+    }
+
+    return clientId;
+};
+
 const getAllowedCorsOrigins = () => {
     const envOrigins = (process.env.CORS_ORIGINS || '')
         .split(',')
@@ -47,5 +60,6 @@ const getAllowedCorsOrigins = () => {
 module.exports = {
     isProduction,
     getJwtSecret,
+    getGoogleClientId,
     getAllowedCorsOrigins,
 };

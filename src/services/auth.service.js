@@ -2,10 +2,11 @@
  * Auth Service - Business logic for authentication
  */
 const bcrypt = require('bcryptjs');
+const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
 const User = require('../../models/User');
 const ApiError = require('../utils/ApiError');
-const { getJwtSecret } = require('../utils/env');
+const { getGoogleClientId, getJwtSecret } = require('../utils/env');
 
 const JWT_SECRET = getJwtSecret();
 const JWT_EXPIRES_IN = '7d';
@@ -21,6 +22,30 @@ const generateToken = (user) => {
         JWT_SECRET,
         { expiresIn: JWT_EXPIRES_IN }
     );
+};
+
+const formatUser = (user) => ({
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    avatarUrl: user.avatarUrl,
+    createdAt: user.createdAt,
+});
+
+const getGoogleAuthConfig = () => {
+    const clientId = getGoogleClientId();
+
+    if (!clientId) {
+        return {
+            clientId: '',
+            googleClient: null,
+        };
+    }
+
+    return {
+        clientId,
+        googleClient: new OAuth2Client(clientId),
+    };
 };
 
 /**
@@ -52,11 +77,7 @@ const registerUser = async ({ name, email, password }) => {
     const token = generateToken(newUser);
 
     return {
-        user: {
-            id: newUser._id,
-            name: newUser.name,
-            email: newUser.email,
-        },
+        user: formatUser(newUser),
         token,
     };
 };
@@ -74,6 +95,10 @@ const loginUser = async ({ email, password }) => {
         throw ApiError.unauthorized('Invalid credentials. User not found.');
     }
 
+    if (!user.password) {
+        throw ApiError.unauthorized('This account uses Google sign-in. Please continue with Google.');
+    }
+
     // Compare passwords
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
@@ -84,12 +109,69 @@ const loginUser = async ({ email, password }) => {
     const token = generateToken(user);
 
     return {
-        user: {
-            id: user._id,
-            name: user.name,
-            email: user.email,
-        },
+        user: formatUser(user),
         token,
+    };
+};
+
+/**
+ * Login or register user with Google
+ * @param {Object} payload - { credential }
+ * @returns {Object} { user, token }
+ */
+const loginWithGoogle = async ({ credential }) => {
+    const { clientId, googleClient } = getGoogleAuthConfig();
+
+    if (!clientId || !googleClient) {
+        throw ApiError.internal('Google sign-in is not configured on the server.');
+    }
+
+    let googlePayload;
+    try {
+        const ticket = await googleClient.verifyIdToken({
+            idToken: credential,
+            audience: clientId,
+        });
+        googlePayload = ticket.getPayload();
+    } catch (error) {
+        throw ApiError.unauthorized('Invalid Google sign-in token.');
+    }
+
+    if (!googlePayload?.sub || !googlePayload?.email || !googlePayload.email_verified) {
+        throw ApiError.unauthorized('Google account email could not be verified.');
+    }
+
+    const email = googlePayload.email.toLowerCase();
+    const name = googlePayload.name || email.split('@')[0];
+    const avatarUrl = googlePayload.picture || '';
+
+    let user = await User.findOne({
+        $or: [{ googleId: googlePayload.sub }, { email }],
+    });
+
+    if (!user) {
+        user = new User({
+            name,
+            email,
+            googleId: googlePayload.sub,
+            avatarUrl,
+            createdAt: new Date(),
+        });
+    } else {
+        user.googleId = googlePayload.sub;
+        if (avatarUrl) {
+            user.avatarUrl = avatarUrl;
+        }
+        if (!user.name && name) {
+            user.name = name;
+        }
+    }
+
+    await user.save();
+
+    return {
+        user: formatUser(user),
+        token: generateToken(user),
     };
 };
 
@@ -106,10 +188,7 @@ const getUserById = async (userId) => {
     }
 
     return {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        createdAt: user.createdAt,
+        ...formatUser(user),
     };
 };
 
@@ -138,6 +217,7 @@ module.exports = {
     generateToken,
     registerUser,
     loginUser,
+    loginWithGoogle,
     getUserById,
     verifyToken,
 };

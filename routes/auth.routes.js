@@ -6,7 +6,12 @@ const express = require('express');
 const router = express.Router();
 
 const authController = require('../src/controllers/auth.controller');
-const { validateRegister, validateLogin, validateToken } = require('../src/validators/auth.validator');
+const {
+    validateRegister,
+    validateLogin,
+    validateGoogleLogin,
+    validateToken,
+} = require('../src/validators/auth.validator');
 const { verifyToken } = require('../middleware/auth');
 const { createRateLimiter } = require('../middleware/rateLimit');
 
@@ -27,6 +32,9 @@ router.post('/register', authAttemptLimiter, validateRegister, authController.re
 
 // POST /api/auth/login - Login user
 router.post('/login', authAttemptLimiter, validateLogin, authController.login);
+
+// POST /api/auth/google - Login or register user with Google
+router.post('/google', authAttemptLimiter, validateGoogleLogin, authController.googleLogin);
 
 // GET /api/auth/me - Get current user info (protected)
 router.get('/me', verifyToken, authController.getMe);

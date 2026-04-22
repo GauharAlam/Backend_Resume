@@ -68,6 +68,33 @@ const login = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Login or register user with Google
+ * @route   POST /api/auth/google
+ * @access  Public
+ */
+const googleLogin = asyncHandler(async (req, res) => {
+    const { credential } = req.body;
+
+    if (!credential) {
+        return res.status(400).json(
+            ApiResponse.error('Google credential is required.', 400)
+        );
+    }
+
+    const result = await authService.loginWithGoogle({ credential });
+
+    res.status(200).json(
+        ApiResponse.success(
+            {
+                token: result.token,
+                user: result.user,
+            },
+            'Google login successful!'
+        )
+    );
+});
+
+/**
  * @desc    Get current user info
  * @route   GET /api/auth/me
  * @access  Private
@@ -104,6 +131,7 @@ const verifyToken = asyncHandler(async (req, res) => {
 module.exports = {
     register,
     login,
+    googleLogin,
     getMe,
     verifyToken,
 };
