@@ -1,64 +1,43 @@
-/**
- * JWT Authentication Middleware
- * Verifies JWT tokens and attaches user info to request
- */
-const jwt = require('jsonwebtoken');
-const { getJwtSecret } = require('../src/utils/env');
-
-const JWT_SECRET = getJwtSecret();
+const { clerkMiddleware, getAuth } = require('@clerk/express');
+const User = require('../models/User');
 
 /**
- * Middleware to verify JWT token from Authorization header
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next function
+ * Middleware to verify Clerk token and auto-provision user in DB
  */
-const verifyToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: 'Access token required.',
-    });
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    req.userId = decoded.userId;
-    req.userName = decoded.name;
-    req.userEmail = decoded.email;
-    next();
-  } catch (error) {
-    return res.status(403).json({
-      success: false,
-      message: 'Invalid or expired token.',
-    });
-  }
-};
-
-/**
- * Optional auth middleware - doesn't fail if no token
- * Useful for routes that can work with or without auth
- */
-const optionalAuth = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (token) {
+const verifyToken = [
+  clerkMiddleware(),
+  async (req, res, next) => {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = decoded;
-      req.userId = decoded.userId;
-      req.userName = decoded.name;
-      req.userEmail = decoded.email;
+      const { userId } = getAuth(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      // Check if user exists in DB
+      let user = await User.findOne({ clerkId: userId });
+      
+      if (!user) {
+        user = await User.create({
+          clerkId: userId,
+          name: 'Clerk User', // Placeholder
+          email: `${userId}@placeholder.clerk.com`, // Placeholder
+        });
+      }
+
+      req.user = user;
+      req.userId = user._id; // Use mongo _id for internal relations
+      next();
     } catch (error) {
-      // Token invalid, but continue without auth
+      console.error('Error in auth middleware:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
     }
   }
+];
 
+/**
+ * Optional auth middleware
+ */
+const optionalAuth = async (req, res, next) => {
   next();
 };
 

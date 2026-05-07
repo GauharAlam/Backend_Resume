@@ -2,6 +2,11 @@
 const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
+  clerkId: {
+    type: String,
+    required: true,
+    unique: true,
+  },
   name: {
     type: String,
     required: [true, 'Please provide a name'],
@@ -17,19 +22,6 @@ const UserSchema = new mongoose.Schema({
       /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
       'Please provide a valid email',
     ],
-  },
-  password: {
-    type: String,
-    required: function requiredPassword() {
-      return !this.googleId;
-    },
-    minlength: 6,
-    select: false, // Don't return password by default
-  },
-  googleId: {
-    type: String,
-    unique: true,
-    sparse: true,
   },
   avatarUrl: {
     type: String,
