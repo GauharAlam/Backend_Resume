@@ -53,6 +53,7 @@ app.use(cors({
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 
 // Body Parser Configuration
@@ -180,10 +181,20 @@ app.use((err, req, res, next) => {
 // =============================================================================
 
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔒 Allowed CORS Origins: ${allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'None (Only local allowed)'}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Error: Port ${PORT} is already in use.`);
+    console.log('💡 Tip: Try killing the process with: lsof -ti :5001 | xargs kill -9');
+    process.exit(1);
+  } else {
+    console.error('❌ Server error:', err);
+  }
 });
 
 module.exports = app;
