@@ -17,6 +17,7 @@ const MAX = {
   company: 200,
   context: 2000,
   instruction: 6000,
+  resumeText: 30000,
 };
 
 const str = (v) => (typeof v === 'string' ? v : v == null ? '' : String(v));
@@ -106,7 +107,27 @@ const validateGenerateBullets = (req, res, next) => {
   next();
 };
 
+const validateParseResume = (req, res, next) => {
+  const { text } = req.body || {};
+  if (str(text).trim().length < 80) return fail(res, 'The resume text is too short to read. Try another file or paste the text.');
+  if (!checkLen(res, 'text', text, MAX.resumeText)) return;
+  next();
+};
+
+// Only public profile links are accepted, so the endpoint can't be pointed at arbitrary URLs
+const LINKEDIN_PROFILE_RE = /^https?:\/\/([a-z]{2,3}\.)?linkedin\.com\/in\/[^\s/?#]+\/?(\?.*)?$/i;
+
+const validateLinkedInImport = (req, res, next) => {
+  const { url } = req.body || {};
+  if (!LINKEDIN_PROFILE_RE.test(str(url).trim()) || str(url).length > 300) {
+    return fail(res, 'Enter a LinkedIn profile link like https://www.linkedin.com/in/your-name');
+  }
+  next();
+};
+
 module.exports = {
+  validateParseResume,
+  validateLinkedInImport,
   validateImproveText,
   validateSuggestSkills,
   validateResumePayload,

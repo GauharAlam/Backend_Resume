@@ -12,6 +12,8 @@ const {
   validateChatbot,
   validateGenerateFullResume,
   validateGenerateBullets,
+  validateParseResume,
+  validateLinkedInImport,
 } = require("../src/validators/ai.validator");
 
 // All AI routes require authentication
@@ -40,5 +42,8 @@ router.post("/jd-match", validateCoverLetter, aiController.analyzeJDMatch);
 router.post("/chatbot", validateChatbot, aiController.getChatbotResponse);
 router.post("/generate-full-resume", validateGenerateFullResume, aiController.generateFullResume);
 router.post("/generate-bullets", validateGenerateBullets, aiController.generateBullets);
+
+router.post("/parse-resume", validateParseResume, aiController.parseResume);
+router.post("/import-linkedin", validateLinkedInImport, aiController.importLinkedIn);
 
 module.exports = router;
