@@ -34,7 +34,7 @@ cp .env.example .env   # then fill in the values below
 npm run dev
 ```
 
-The API runs at `http://localhost:5001/api`. Check it with `GET /api/health`.
+The API runs at `http://localhost:5001/api`. Open `http://localhost:5001/` for a status summary, or call `GET /api/health`.
 
 ### Environment variables
 
@@ -65,13 +65,28 @@ If `OPENROUTER_API_KEY` is not set, the server falls back to `NVIDIA_API_KEY` an
 
 ## API
 
-All routes are under `/api`. Routes marked **Auth** need a Clerk session token in the `Authorization: Bearer <token>` header.
+All routes are under `/api`. Routes marked **Auth** need a Clerk session token in the `Authorization: Bearer <token>` header. Clerk tokens expire after about a minute, so clients should request a fresh one for each call.
 
-### Health
+### Response format
+
+Every endpoint returns JSON in the same shape:
+
+```json
+{ "success": true, "data": { } }
+```
+
+```json
+{ "success": false, "message": "What went wrong", "errors": [{ "field": "title", "message": "Title is required" }] }
+```
+
+`errors` is only present for validation failures. Common status codes: `400` invalid input, `401` missing or expired token, `404` not found, `429` rate limit reached, `503` a dependency (database or AI provider) is unavailable, `504` the AI request timed out.
+
+### Health and status
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| GET | `/health` | No | Returns `200` when the database is connected, `503` otherwise. |
+| GET | `/` (no `/api` prefix) | No | Status summary: database connection, environment, and how many CORS origins are configured. The first place to look when a deployment misbehaves. |
+| GET | `/api/health` | No | Returns `200` when the database is connected, `503` otherwise. |
 
 ### Resumes
 
@@ -140,6 +155,39 @@ src/
 1. Set the environment variables above in your hosting provider, with `NODE_ENV=production`.
 2. Set `CORS_ORIGINS` to the exact URL of the deployed frontend. In production an empty list blocks all browser origins, and `*` is refused.
 3. Point the frontend's `VITE_API_BASE_URL` at `<your-backend-url>/api`.
+
+### Deployment checklist
+
+After deploying, open `https://<your-backend-url>/` and confirm:
+
+- `"database": "✅ Connected"`
+- `"cors": { "configuredCount": 1 }` or more
+- `"action_required": "None. System is healthy."`
+
+The database connects in the background on a cold start, so the very first request can report `Disconnected`. Refresh once before treating it as a fault.
+
+Environment variable changes on Vercel only apply to **new** deployments; redeploy after editing them.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| Browser requests fail and the console mentions CORS; preflight returns `500` | The frontend's origin is not in `CORS_ORIGINS` | Add the exact origin (scheme and host, no trailing slash, no path), e.g. `https://your-app.netlify.app`, then redeploy. Check for typos in the hostname. |
+| `/api/health` returns `503` with `"db": "not-ready"` | `MONGO_URI` is missing or wrong, or MongoDB Atlas is blocking the host | Set `MONGO_URI`. In Atlas → Network Access, allow `0.0.0.0/0`, since serverless hosts have no fixed IP address. |
+| Every authenticated route returns `401` | Missing or expired token, or the Clerk keys belong to a different Clerk application than the frontend's | Use the secret and publishable keys from the same Clerk application (and the same instance: development or production) as the frontend. |
+| AI routes return `503` "temporarily unavailable" | No AI key configured, or the provider rejected the key | Set `OPENROUTER_API_KEY` and confirm the account has credit. |
+| AI routes return `429` | Per-user AI limit (30 requests per 10 minutes) or the provider's own limit | Wait and retry. |
+| AI routes return `504` | The provider took longer than `AI_TIMEOUT_MS` | Retry, raise `AI_TIMEOUT_MS`, or choose a faster `AI_MODEL`. |
+| `/ai/import-linkedin` returns `503` "not configured" | `RAPIDAPI_KEY` is not set | Set it, or leave it unset to keep LinkedIn import disabled. |
+
+Startup problems are also written to the server log (Vercel → Logs), including the exact MongoDB connection error.
+
+## Security notes
+
+- Secrets (`MONGO_URI`, Clerk secret key, AI and RapidAPI keys) live only in this service's environment. The frontend must never receive them.
+- CORS is closed by default in production: an empty `CORS_ORIGINS` blocks all browser origins, and `*` is refused.
+- Resume data is scoped to the signed-in user; only resumes with sharing turned on are readable through `/resumes/share/:shareId`.
+- AI prompts treat uploaded resume text as data, and every AI input is length-capped to bound cost.
 
 ## Related
 
