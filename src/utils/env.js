@@ -12,11 +12,12 @@ const getAllowedCorsOrigins = () => {
 
     if (isProduction) {
         if (envOrigins.length === 0) {
-            console.warn('⚠️ WARNING: CORS_ORIGINS is not set in production. All cross-origin requests will be blocked.');
+            console.error('🚫 CORS_ORIGINS is not set in production. All browser origins will be blocked (fail-closed). Set CORS_ORIGINS to your frontend URL.');
             return [];
         }
         if (envOrigins.includes('*')) {
-            console.warn('⚠️ WARNING: CORS_ORIGINS includes "*" in production. This is insecure.');
+            console.error('🚫 CORS_ORIGINS includes "*" in production. Refusing wildcard with credentials — set explicit origins.');
+            return envOrigins.filter((o) => o !== '*');
         }
         return envOrigins;
     }

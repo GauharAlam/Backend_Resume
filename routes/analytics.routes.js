@@ -7,7 +7,7 @@ const { createRateLimiter } = require('../middleware/rateLimit');
 
 const analyticsLimiter = createRateLimiter({
   windowMs: 60 * 1000,
-  maxRequests: 120,
+  maxRequests: 60,
   keyPrefix: 'analytics',
 });
 

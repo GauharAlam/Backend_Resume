@@ -11,7 +11,10 @@ const resumeService = require('../services/resume.service');
  * @access  Private
  */
 const getAllResumes = asyncHandler(async (req, res) => {
-    const resumes = await resumeService.getAllResumes(req.userId);
+    const resumes = await resumeService.getAllResumes(req.userId, {
+        page: req.query.page,
+        limit: req.query.limit,
+    });
 
     res.status(200).json(
         ApiResponse.success(resumes)
@@ -82,7 +85,7 @@ const updateResume = asyncHandler(async (req, res) => {
  * @access  Private
  */
 const togglePublicStatus = asyncHandler(async (req, res) => {
-    const { isPublic } = req.body;
+    const { isPublic, rotate } = req.body;
 
     if (typeof isPublic !== 'boolean') {
         return res.status(400).json(
@@ -93,7 +96,8 @@ const togglePublicStatus = asyncHandler(async (req, res) => {
     const resume = await resumeService.togglePublicStatus(
         req.params.id,
         req.userId,
-        isPublic
+        isPublic,
+        rotate === true || req.query.rotate === 'true'
     );
 
     res.status(200).json(

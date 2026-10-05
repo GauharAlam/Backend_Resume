@@ -1,4 +1,4 @@
-const { clerkMiddleware, getAuth } = require('@clerk/express');
+const { clerkMiddleware, getAuth, clerkClient } = require('@clerk/express');
 const User = require('../models/User');
 
 /**
@@ -17,10 +17,27 @@ const verifyToken = [
       let user = await User.findOne({ clerkId: userId });
       
       if (!user) {
+        // Try to fetch real profile from Clerk to avoid placeholder PII
+        let clerkName = 'Clerk User';
+        let clerkEmail = `${userId}@placeholder.clerk.com`;
+        let avatarUrl = undefined;
+        try {
+          if (clerkClient && clerkClient.users && typeof clerkClient.users.getUser === 'function') {
+            const clerkUser = await clerkClient.users.getUser(userId);
+            clerkName = clerkUser.firstName || clerkUser.username || clerkName;
+            if (clerkUser.lastName) clerkName = `${clerkName} ${clerkUser.lastName}`.trim();
+            const primaryEmail = clerkUser.emailAddresses?.find(e => e.id === clerkUser.primaryEmailAddressId) || clerkUser.emailAddresses?.[0];
+            if (primaryEmail?.emailAddress) clerkEmail = primaryEmail.emailAddress;
+            avatarUrl = clerkUser.imageUrl || undefined;
+          }
+        } catch (fetchErr) {
+          console.warn('Could not fetch Clerk user details, using placeholder:', fetchErr.message);
+        }
         user = await User.create({
           clerkId: userId,
-          name: 'Clerk User', // Placeholder
-          email: `${userId}@placeholder.clerk.com`, // Placeholder
+          name: clerkName,
+          email: clerkEmail,
+          ...(avatarUrl ? { avatarUrl } : {}),
         });
       }
 

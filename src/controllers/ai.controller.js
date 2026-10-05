@@ -2,28 +2,79 @@ const OpenAI = require("openai");
 const ApiError = require("../utils/ApiError");
 const { HTTP_STATUS } = require("../utils/constants");
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.NVIDIA_API_KEY,
-  baseURL: process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1",
-});
+// Lazy-initialized OpenAI client — supports OpenRouter (preferred) or NVIDIA (fallback)
+// Set OPENROUTER_API_KEY + OPENROUTER_BASE_URL (default https://openrouter.ai/api/v1) to use OpenRouter
+let _openai = null;
+let _aiModel = null;
+const getOpenAI = () => {
+  if (_openai) return { client: _openai, model: _aiModel };
+  const isOpenRouter = !!process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY;
+  const baseURL = process.env.OPENROUTER_BASE_URL || process.env.NVIDIA_BASE_URL || (isOpenRouter ? "https://openrouter.ai/api/v1" : "https://integrate.api.nvidia.com/v1");
+  if (!apiKey) {
+    const e = new Error("AI service is temporarily unavailable (not configured)");
+    e.status = 503;
+    e.statusCode = 503;
+    throw e;
+  }
+  const defaultHeaders = isOpenRouter
+    ? {
+        "HTTP-Referer": process.env.OPENROUTER_REFERER || "http://localhost:3000",
+        "X-Title": process.env.OPENROUTER_TITLE || "AI Resume Builder",
+      }
+    : undefined;
+  _openai = new OpenAI({
+    apiKey,
+    baseURL,
+    ...(defaultHeaders ? { defaultHeaders } : {}),
+  });
+  // OpenRouter model example: deepseek/deepseek-chat, openai/gpt-4o-mini, anthropic/claude-3.5-sonnet
+  // NVIDIA model example: deepseek-ai/deepseek-v3.1-terminus
+  _aiModel = process.env.AI_MODEL || process.env.OPENROUTER_MODEL || (isOpenRouter ? "deepseek/deepseek-chat" : "deepseek-ai/deepseek-v3.1-terminus");
+  return { client: _openai, model: _aiModel };
+};
 
-const AI_MODEL = process.env.AI_MODEL || "deepseek-ai/deepseek-v3.1-terminus";
+// Fail-fast when AI keys are missing (503 instead of opaque provider 401)
+const requireAI = () => {
+  try {
+    return getOpenAI();
+  } catch (err) {
+    const e = new Error("AI service is temporarily unavailable (not configured)");
+    e.status = HTTP_STATUS.SERVICE_UNAVAILABLE || 503;
+    throw e;
+  }
+};
+
+// 30s timeout so hung providers don't hang Node/Vercel. SDK-agnostic.
+const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS || "30000", 10);
+const createChatCompletion = (openai, args) =>
+  Promise.race([
+    openai.chat.completions.create(args),
+    new Promise((_, reject) => {
+      const e = new Error("AI request timed out, please try again");
+      e.status = 504;
+      e.code = "AI_TIMEOUT";
+      setTimeout(() => reject(e), AI_TIMEOUT_MS);
+    }),
+  ]);
 
 /**
- * Helper to parse JSON from AI response
+ * Helper to parse JSON from AI response — handles markdown fences with/without language tag and extra whitespace
  */
 const parseJSON = (text) => {
+  if (!text || typeof text !== 'string') throw new Error("Could not parse JSON from AI response");
   try {
     return JSON.parse(text);
   } catch (e) {
+    // Match ```json ... ``` , ``` ... ``` , or raw { ... }
     const jsonMatch =
-      text.match(/```json\n([\s\S]*?)\n```/) || text.match(/{[\s\S]*}/);
+      text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/) || text.match(/{[\s\S]*}/);
     if (jsonMatch) {
+      const candidate = (jsonMatch[1] || jsonMatch[0]).trim();
       try {
-        return JSON.parse(jsonMatch[1] || jsonMatch[0]);
+        return JSON.parse(candidate);
       } catch (innerE) {
-        console.error("Failed to parse matched JSON block:", innerE);
+        console.error("Failed to parse matched JSON block:", innerE, candidate.slice(0, 500));
       }
     }
     throw new Error("Could not parse JSON from AI response");
@@ -35,7 +86,8 @@ const parseJSON = (text) => {
  */
 exports.improveText = async (req, res, next) => {
   try {
-    const { text, section, jobTitle } = req.body;
+    const { client: openai, model: AI_MODEL } = requireAI();
+    const { text, section, jobTitle, instruction } = req.body;
 
     if (!text) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
@@ -55,9 +107,13 @@ exports.improveText = async (req, res, next) => {
 3. Your response MUST be PLAIN TEXT.
 4. DO NOT use any HTML tags like <ul>, <li>, <p>, or <html>.
 5. If you provide multiple points, start each line with a bullet point character (•).
-6. DO NOT include "Option 1" or any introductory text. Just return the content.`;
+6. DO NOT include "Option 1" or any introductory text. Just return the content.${
+      instruction
+        ? `\n7. Never invent facts, employers, or numbers that are not in the original text.\n\n**Additional direction from the user (apply it to the rewrite only):**\n${String(instruction).trim()}`
+        : ""
+    }`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
         {
@@ -69,7 +125,6 @@ exports.improveText = async (req, res, next) => {
       temperature: 0.2,
       top_p: 0.7,
       max_tokens: 8192,
-      chat_template_kwargs: { thinking: true },
     });
 
     res.status(HTTP_STATUS.OK).json({
@@ -86,11 +141,12 @@ exports.improveText = async (req, res, next) => {
  */
 exports.suggestSkills = async (req, res, next) => {
   try {
+    const { client: openai, model: AI_MODEL } = requireAI();
     const { jobTitle, experience } = req.body;
 
     const prompt = `Based on the job title "${jobTitle}" and the experience described below, suggest a comma-separated list of 10-15 relevant hard and soft skills for this resume. Only return the list, no other text.\n\nExperience:\n${experience}`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
         {
@@ -103,7 +159,6 @@ exports.suggestSkills = async (req, res, next) => {
       temperature: 0.2,
       top_p: 0.7,
       max_tokens: 8192,
-      chat_template_kwargs: { thinking: true },
     });
 
     res.status(HTTP_STATUS.OK).json({
@@ -120,6 +175,7 @@ exports.suggestSkills = async (req, res, next) => {
  */
 exports.analyzeResume = async (req, res, next) => {
   try {
+    const { client: openai, model: AI_MODEL } = requireAI();
     const { resumeData } = req.body;
 
     const prompt = `Analyze the following resume for a "${resumeData.personalDetails.jobTitle}" position. Provide a score out of 100 and a list of 3-5 specific, actionable feedback points for improvement.
@@ -133,7 +189,7 @@ exports.analyzeResume = async (req, res, next) => {
         Resume Content:
         ${JSON.stringify(resumeData)}`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
         {
@@ -147,7 +203,6 @@ exports.analyzeResume = async (req, res, next) => {
       top_p: 0.7,
       max_tokens: 8192,
       response_format: { type: "json_object" },
-      chat_template_kwargs: { thinking: true },
     });
 
     const content = completion.choices[0]?.message?.content || "";
@@ -165,6 +220,7 @@ exports.analyzeResume = async (req, res, next) => {
  */
 exports.analyzeATS = async (req, res, next) => {
   try {
+    const { client: openai, model: AI_MODEL } = requireAI();
     const { resumeData, jobDescription } = req.body;
 
     const prompt = `You are an expert ATS resume analyzer. Compare the provided resume against the job description.
@@ -185,7 +241,7 @@ exports.analyzeATS = async (req, res, next) => {
         **Job Description:**
         ${jobDescription}`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
         {
@@ -199,7 +255,6 @@ exports.analyzeATS = async (req, res, next) => {
       top_p: 0.7,
       max_tokens: 8192,
       response_format: { type: "json_object" },
-      chat_template_kwargs: { thinking: true },
     });
 
     const content = completion.choices[0]?.message?.content || "";
@@ -217,6 +272,7 @@ exports.analyzeATS = async (req, res, next) => {
  */
 exports.generateCoverLetter = async (req, res, next) => {
   try {
+    const { client: openai, model: AI_MODEL } = requireAI();
     const { resumeData, jobDescription } = req.body;
 
     const prompt = `Write a professional and compelling cover letter based on the following resume and job description.
@@ -232,7 +288,7 @@ exports.generateCoverLetter = async (req, res, next) => {
         2. Use clear spacing and newlines between paragraphs.
         3. DO NOT use any HTML tags or markdown.`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
         {
@@ -245,7 +301,6 @@ exports.generateCoverLetter = async (req, res, next) => {
       temperature: 0.2,
       top_p: 0.7,
       max_tokens: 8192,
-      chat_template_kwargs: { thinking: true },
     });
 
     res.status(HTTP_STATUS.OK).json({
@@ -262,6 +317,7 @@ exports.generateCoverLetter = async (req, res, next) => {
  */
 exports.analyzeJDMatch = async (req, res, next) => {
   try {
+    const { client: openai, model: AI_MODEL } = requireAI();
     const { resumeData, jobDescription } = req.body;
 
     if (!jobDescription || !jobDescription.trim()) {
@@ -377,7 +433,7 @@ ${resumeText}
 --- JOB DESCRIPTION ---
 ${jobDescription}`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
         {
@@ -391,7 +447,6 @@ ${jobDescription}`;
       top_p: 0.7,
       max_tokens: 8192,
       response_format: { type: "json_object" },
-      chat_template_kwargs: { thinking: true },
     });
 
     const content = completion.choices[0]?.message?.content || "";
@@ -418,22 +473,30 @@ ${jobDescription}`;
  */
 exports.getChatbotResponse = async (req, res, next) => {
   try {
-    const { message, resumeContext, systemInstruction } = req.body;
-    console.log(`🤖 Chatbot request started: "${message.substring(0, 50)}..."`);
+    const { client: openai, model: AI_MODEL } = requireAI();
+    const { message, resumeContext } = req.body;
+    // NOTE: client-supplied systemInstruction is ignored to prevent prompt-injection
+    // (attacker using your key as an open LLM proxy). Server prompt is fixed.
+    const safeMessage = String(message || "").slice(0, 4000);
+    const safeContext = String(resumeContext || "").slice(0, 20000);
+    console.log(`🤖 Chatbot request started: "${safeMessage.substring(0, 50)}..."`);
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
-        { role: "system", content: systemInstruction },
+        {
+          role: "system",
+          content:
+            "You are CareerBot, an expert career advisor inside a resume builder. Only answer career, resume, interview, and job-search questions. Reference the provided resume context when relevant. Refuse unrelated requests (e.g., code, essays, general trivia) briefly and redirect to career help.",
+        },
         {
           role: "user",
-          content: `${resumeContext}\n\nUser's question: "${message}"`,
+          content: `Resume context:\n${safeContext}\n\nUser's question: "${safeMessage}"`,
         },
       ],
       temperature: 0.2,
       top_p: 0.7,
-      max_tokens: 8192,
-      chat_template_kwargs: { thinking: true },
+      max_tokens: 2048,
     });
 
     console.log(`✅ Chatbot request completed successfully`);
@@ -452,6 +515,7 @@ exports.getChatbotResponse = async (req, res, next) => {
  */
 exports.generateFullResume = async (req, res, next) => {
   try {
+    const { client: openai, model: AI_MODEL } = requireAI();
     const { jobTitle, experienceLevel } = req.body;
 
     if (!jobTitle) {
@@ -516,7 +580,7 @@ RULES:
 - All descriptions should use bullet points starting with •.
 - Return ONLY valid JSON, no markdown fences.`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
         {
@@ -530,7 +594,6 @@ RULES:
       top_p: 0.7,
       max_tokens: 8192,
       response_format: { type: "json_object" },
-      chat_template_kwargs: { thinking: true },
     });
 
     const content = completion.choices[0]?.message?.content || "";
@@ -547,6 +610,7 @@ RULES:
  */
 exports.generateBullets = async (req, res, next) => {
   try {
+    const { client: openai, model: AI_MODEL } = requireAI();
     const { jobTitle, company, section, context } = req.body;
 
     if (!jobTitle && !section) {
@@ -576,7 +640,7 @@ RULES:
 6. DO NOT use any HTML tags or markdown formatting.
 7. Separate each bullet point with a newline.`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion(openai, {
       model: AI_MODEL,
       messages: [
         {
@@ -589,7 +653,6 @@ RULES:
       temperature: 0.3,
       top_p: 0.7,
       max_tokens: 4096,
-      chat_template_kwargs: { thinking: true },
     });
 
     res.status(HTTP_STATUS.OK).json({

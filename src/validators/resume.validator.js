@@ -3,6 +3,25 @@
  */
 const { HTTP_STATUS } = require('../utils/constants');
 
+// 1MB cap allows base64 photos but blocks 50MB abuse (body limit is 2MB)
+const MAX_RESUME_JSON_CHARS = 1000000;
+
+const checkResumeDataSize = (resumeData, errors) => {
+    if (resumeData === undefined) return;
+    if (typeof resumeData !== 'object' || resumeData === null || Array.isArray(resumeData)) {
+        errors.push({ field: 'resumeData', message: 'Resume data must be an object' });
+        return;
+    }
+    try {
+        const size = JSON.stringify(resumeData).length;
+        if (size > MAX_RESUME_JSON_CHARS) {
+            errors.push({ field: 'resumeData', message: `Resume data exceeds maximum size of ${MAX_RESUME_JSON_CHARS} characters` });
+        }
+    } catch {
+        errors.push({ field: 'resumeData', message: 'Resume data is not serializable' });
+    }
+};
+
 /**
  * Validate create resume input
  * @param {Object} req - Express request object
@@ -27,6 +46,8 @@ const validateCreateResume = (req, res, next) => {
         errors.push({ field: 'resumeData', message: 'Resume data is required' });
     } else if (typeof resumeData !== 'object') {
         errors.push({ field: 'resumeData', message: 'Resume data must be an object' });
+    } else {
+        checkResumeDataSize(resumeData, errors);
     }
 
     if (errors.length > 0) {
@@ -70,9 +91,7 @@ const validateUpdateResume = (req, res, next) => {
     }
 
     // ResumeData validation (if provided)
-    if (resumeData !== undefined && typeof resumeData !== 'object') {
-        errors.push({ field: 'resumeData', message: 'Resume data must be an object' });
-    }
+    if (resumeData !== undefined) checkResumeDataSize(resumeData, errors);
 
     if (errors.length > 0) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({

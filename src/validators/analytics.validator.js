@@ -10,6 +10,13 @@ const validateAnalyticsEvent = (req, res, next) => {
     });
   }
 
+  if (!/^[a-zA-Z0-9_.-]+$/.test(event.trim())) {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json({
+      success: false,
+      message: 'Invalid analytics event name.',
+    });
+  }
+
   if (payload !== undefined && (typeof payload !== 'object' || Array.isArray(payload))) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json({
       success: false,
@@ -17,7 +24,24 @@ const validateAnalyticsEvent = (req, res, next) => {
     });
   }
 
-  if (path !== undefined && typeof path !== 'string') {
+  if (payload !== undefined) {
+    try {
+      const size = JSON.stringify(payload).length;
+      if (size > 5000) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          success: false,
+          message: 'Analytics payload too large.',
+        });
+      }
+    } catch {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        message: 'Invalid analytics payload.',
+      });
+    }
+  }
+
+  if (path !== undefined && (typeof path !== 'string' || path.length > 500)) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json({
       success: false,
       message: 'Invalid analytics path.',
